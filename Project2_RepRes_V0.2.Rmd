@@ -1,0 +1,301 @@
+---
+title: "Natural Events - Health & Economic Impact "
+#author: "Joerg Heintz"
+#date: "3/16/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lattice)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+```
+
+# Summary / Research Question
+Storms and other severe weather events cause both public health and economic problems. Severe events result in fatalities, injuries, property and crop damage. In the follwing I have explored the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database to determine, which types of events 
+
+* are most harmful with respect to population health, expressed in fatalities, and injuries?
+* have the greatest economic consequences, expressed in property and crop damage?
+
+The answers to both questions are given by tables with top 1o natural disaster events, and graphics that show, over the time period from 1950 and end in November 2011, the accumulated health and economic impact.  
+
+# Data Fetching
+#### Data Download & Ingestion
+```{r, echo = TRUE, eval = TRUE, cache=TRUE}
+# set work directory
+setwd("/Users/joergheintz/Documents/08_MPHPHI/11_Coursera/Coursera_ReproduciableResearch/RepResProj2")
+
+#data download from the source
+mypath<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(mypath,"myfile.bz2")
+
+# read file, and extract needed variables
+mydata<-read.csv("myfile.bz2")[,c("STATE", "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP", "BGN_DATE")]
+```
+
+#### Cleaning & Restructure Date 
+```{r, cache = TRUE ,echo = TRUE, eval = TRUE}
+# Split date from time, keep date
+BGN_DATE<-data.frame(t(as.data.frame(strsplit(as.character(mydata$BGN_DATE),' ')))[,1], row.names=NULL)
+mydata$BGN_DATE<-as.Date(mydata$BGN_DATE, "%m/%d/%Y")
+```
+
+#### Split data set into Fatalities/Injuiries and Property/Crop Damage
+The splited data sets, one for health, and other for economic are stored locally. 
+```{r, cache = TRUE ,echo = TRUE, eval = TRUE}
+# Fatalities & Injuries
+df_FAT_INJ<-mydata[mydata$FATALITIES != 0 | mydata$INJURIES != 0 ,c("STATE", "EVTYPE", "FATALITIES", "INJURIES", "BGN_DATE")]
+write.csv(df_FAT_INJ, "FAT_INJ.csv")
+
+# Property & Crop Damage
+df_ECO_DAM<-mydata[mydata$PROPDMG != 0 | mydata$CROPDMG, c("STATE", "EVTYPE", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP", "BGN_DATE") ] 
+write.csv(df_ECO_DAM, "ECO_DAM.csv")
+```
+
+# Data Processing
+The data processing sections accumulate the values from date to date (incremental). The following steps have been taken:
+
+1. Top 10 event calculation (using tapply, grouped by events)
+2. Calculation of the time series of the top 5 events, plot preperation. 
+3. Generating top 5 event plots. The plots are prepared in each section and ploted in the result sections public health- and economic impact.
+
+
+## Fatilities and Injuries Processings
+### Fatilities
+  
+```{r, echo = TRUE, eval = TRUE}
+# read data set
+myFAT<-read.csv("FAT_INJ.csv")
+
+# Sums up by event and generates top 5 and top 10 events
+FAT<-as.data.frame(tapply(myFAT$FATALITIES, myFAT$EVTYPE, sum))
+FAT$EVENT<-rownames(FAT)
+colnames(FAT)<-c("fatalities", "events")
+rownames(FAT)<-NULL
+FAT<-FAT[order(-FAT$fatalities),]
+FAT10<-FAT[1:10,]
+FAT5<-FAT[1:5,]
+```
+
+```{r, echo = TRUE, eval = TRUE}
+# Fatalities
+# Generates the times series pro top 5 event, and sums up the values pro date
+fat<-data.frame()
+for (ev in FAT5$events){
+        sf<-myFAT[myFAT$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SumFATALITIES<-sf$FATALITIES
+        k<-length(sf$FATALITIES)-1
+        for (i in 1:k){
+                sf$SumFATALITIES[i+1] = sf$SumFATALITIES[i]+sf$SumFATALITIES[i+1]
+                }
+        k=0
+        fat<-rbind(fat,sf)
+}
+fat$BGN_DATE<-fat$BGN_DATE<-as.Date(fat$BGN_DATE, format="%Y-%m-%d")
+fat<-fat[order(as.Date(fat$BGN_DATE, format="%Y-%m-%d")),]
+```
+
+
+```{r, echo = TRUE, eval = TRUE}
+# Fatalities Plots 
+g2 = ggplot(fat, aes(x =BGN_DATE , y = SumFATALITIES, group = EVTYPE, color = factor(EVTYPE)))
+g2 = g2 + xlab("Date") + ylab("Fatalities") + labs(color = "Events")
+g2 = g2 + guides(fill=guide_legend(title="Natural Events"))
+g2 = g2 + ylim(0, 6000)
+g2 = g2 + geom_line()
+```
+
+### INJURIES
+```{r, echo = TRUE, eval = TRUE}
+# read data set
+myINJ<-read.csv("FAT_INJ.csv")
+
+# Sums up by event and generates top 5 and top 10 events
+INJ<-as.data.frame(tapply(myINJ$INJURIES, myINJ$EVTYPE, sum))
+INJ$EVENT<-rownames(INJ)
+colnames(INJ)<-c("injuries", "events")
+rownames(INJ)<-NULL
+INJ<-INJ[order(-INJ$injuries),]
+INJ10<-INJ[1:10,]
+INJ5<-INJ[1:5,]
+```
+
+```{r, echo = TRUE, eval = TRUE}
+#Injuries
+# Generates the times series pro top 5 event, and sums up the values pro date
+inj<-data.frame()
+for (ev in INJ5$events){
+        sf<-myINJ[myINJ$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SumINJURIES<-sf$INJURIES
+        k<-length(sf$INJURIES)-1
+        for (i in 1:k){
+                sf$SumINJURIES[i+1] = sf$SumINJURIES[i]+sf$SumINJURIES[i+1]
+                }
+        k=0
+        inj<-rbind(inj,sf)
+}
+inj$BGN_DATE<-inj$BGN_DATE<-as.Date(inj$BGN_DATE, format="%Y-%m-%d")
+inj<-inj[order(as.Date(inj$BGN_DATE, format="%Y-%m-%d")),]
+```
+
+```{r, echo = TRUE, eval = TRUE}
+# Injuries Plots
+g1 = ggplot(inj, aes(x =BGN_DATE ,y = SumINJURIES,  color = factor(EVTYPE)))
+g1 = g1 + guides(fill=guide_legend(title="Natural Events")) + labs(color = "Events")
+g1 = g1 + xlab("Date") + ylab("Injuries")
+g1 = g1 + ylim(0, 100000)
+g1 = g1 + geom_line()
+```
+
+
+## Economic Damages Processings
+### Property Damage
+The variables K, B, M are substitute by values to calculate the property and crop damages. 
+```{r, echo = TRUE, eval = TRUE}
+# read data set
+myDAM<-read.csv("ECO_DAM.csv")
+
+# Property Damage
+myDAM$PROPDMGEXP<-as.character(myDAM$PROPDMGEXP)
+myDAM[myDAM$PROPDMGEXP != as.character("K") & myDAM$PROPDMGEXP != as.character("M") & myDAM$PROPDMGEXP != as.character("B"), "PROPDMGEXP" ] = 0
+myDAM[myDAM$PROPDMGEXP == "K", "PROPDMGEXP"] <- 1000
+myDAM[myDAM$PROPDMGEXP == "M", "PROPDMGEXP"] <- 1000000
+myDAM[myDAM$PROPDMGEXP == "B", "PROPDMGEXP"] <- 1000000000
+myDAM$PROPDMGEXP<-as.numeric(myDAM$PROPDMGEXP)
+myDAM$PROPDMG <- as.numeric(myDAM$PROPDMG) * as.numeric(myDAM$PROPDMGEXP)
+```
+
+```{r, echo = TRUE, eval = TRUE}
+# Sums up by event and generates top 5 events
+DamProp<-as.data.frame(tapply(myDAM$PROPDMG, myDAM$EVTYPE, sum))
+DamProp$EVENT<-rownames(DamProp)
+colnames(DamProp)<-c("damage", "events")
+rownames(DamProp)<-NULL
+DamProp<-DamProp[order(-DamProp$damage),]
+TopPropDam<-DamProp[1:5,]
+```
+
+```{r, echo = TRUE, eval = TRUE}
+# Property damage
+# Generates the times series pro top 5 event, and sums up the values pro date
+propDam<-data.frame()
+for (ev in TopPropDam$events){
+        sf<-myDAM[myDAM$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SummyDAM<-sf$PROPDMG
+        k<-length(sf$PROPDMG)-1
+        for (i in 1:k){
+                sf$SummyDAM[i+1] = sf$SummyDAM[i]+sf$SummyDAM[i+1]
+                }
+        k=0
+        propDam<-rbind(propDam,sf)
+}
+
+propDam$BGN_DATE<-as.Date(propDam$BGN_DATE, format="%Y-%m-%d")
+propDam<-propDam[order(as.Date(propDam$BGN_DATE, format="%Y-%m-%d")),]
+```
+
+```{r, echo = TRUE, eval = TRUE}
+#Property Damage Plots
+g3 = ggplot(propDam, aes(x =BGN_DATE , y = SummyDAM, group = EVTYPE, color = factor(EVTYPE)))
+g3 = g3 + xlab("Date") + ylab("Property Damage in [$]")+ labs(color = "Events")
+g3 = g3 + geom_line()
+```
+
+
+#### Crop Damage
+```{r, echo = TRUE, eval = TRUE}
+# read data set
+myDAM<-read.csv("ECO_DAM.csv")
+
+#Crop Damage
+myDAM$CROPDMGEXP<-as.character(myDAM$CROPDMGEXP)
+myDAM[myDAM$CROPDMGEXP != as.character("K") & myDAM$CROPDMGEXP != as.character("M") & myDAM$CROPDMGEXP != as.character("B"), "CROPDMGEXP" ] = 0
+myDAM[myDAM$CROPDMGEXP == "K", "CROPDMGEXP"] <- 1000
+myDAM[myDAM$CROPDMGEXP == "M", "CROPDMGEXP"] <- 1000000
+myDAM[myDAM$CROPDMGEXP == "B", "CROPDMGEXP"] <- 1000000000
+myDAM$CROPDMG <- as.numeric(myDAM$CROPDMG) * as.numeric(myDAM$CROPDMGEXP)
+```
+
+
+```{r, echo = TRUE, eval = TRUE}
+# Sums up by event and generates top 5 events
+DamCrop<-as.data.frame(tapply(myDAM$CROPDMG, myDAM$EVTYPE, sum))
+DamCrop$EVENT<-rownames(DamCrop)
+colnames(DamCrop)<-c("damage", "events")
+rownames(DamCrop)<-NULL
+DamCrop<-DamCrop[order(-DamCrop$damage),]
+TopCropDam<-DamCrop[1:5,]
+```
+
+
+```{r, echo = TRUE, eval = TRUE}
+#Crop damage
+# Generates the times series pro top 5 event, and sums up the values pro date
+cropDam<-data.frame()
+for (ev in TopCropDam$events){
+        sf<-myDAM[myDAM$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SummyCropDAM<-sf$CROPDMG
+        k<-length(sf$CROPDMG)-1
+        for (i in 1:k){
+                sf$SummyCropDAM[i+1] = sf$SummyCropDAM[i]+sf$SummyCropDAM[i+1]
+                }
+        k=0
+        cropDam<-rbind(cropDam,sf)
+}
+cropDam$BGN_DATE<-as.Date(cropDam$BGN_DATE, format="%Y-%m-%d")
+cropDam<-cropDam[order(as.Date(cropDam$BGN_DATE, format="%Y-%m-%d")),]
+```
+
+
+```{r, echo = TRUE, eval = TRUE}
+#Property Damage Plots
+g4 = ggplot(cropDam, aes(x =BGN_DATE , y = SummyCropDAM, group = EVTYPE, color = factor(EVTYPE)))
+g4 = g4 + xlab("Date") + ylab("Crop Damage in [$]")+ labs(color = "Events")
+g4 = g4 + geom_line()
+```
+
+
+# Results
+## Health Impact
+#### Top 10 Events Fatalities and Injuries
+
+```{r, echo = TRUE, eval = TRUE, results='asis'}
+HIxt<-xtable(cbind(FAT10, INJ10))
+print(HIxt, type = 'html', include.rownames = FALSE)
+```
+
+#### 1950 to November 2011: Fatilities and Injuries
+```{r, echo = TRUE, eval = TRUE}
+# Combining fatalities and injuries in one plot
+pFat<-ggplotGrob(g2)
+pInf<-ggplotGrob(g1)
+grid.arrange(pFat, pInf, layout_matrix = rbind(2,1))
+```
+
+
+## Economic Impact 
+#### Top 10 Events Property and Crop Damage
+
+```{r, echo = TRUE, eval = TRUE, results='asis'}
+# Transform the table into a html table
+XTDam<-cbind(DamProp[1:10,], DamCrop[1:10,])
+colnames(XTDam)<-c("property damage [$]", "event","crop damage[$]", "event")
+ECxt<-xtable(XTDam, align = "cccrc",latex.environments="center")
+print(ECxt, type = 'html', include.rownames = FALSE)
+```
+
+#### 1950 to November 2011:  Events and related property and crop damage
+```{r, echo = TRUE, eval = TRUE}
+# Combining property and crop damages
+pProp<-ggplotGrob(g3)
+pCrop<-ggplotGrob(g4)
+grid.arrange(pProp, pCrop, layout_matrix = rbind(2,1))
+```

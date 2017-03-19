@@ -1,0 +1,140 @@
+---
+title: "Storm and Severe Weather threaden Public Health and Economic Problems"
+output: github_document
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This investigation provides answers to the following two questions:
+
+1) Across the United States, which types of events are most harmful with respect to population health?
+
+2) Across the United States, which types of events have the greatest economic consequences?
+
+
+
+## Data Download & Ingestion
+```{r, echo = TRUE, eval = TRUE, cache=TRUE}
+# set work directory
+setwd("/Users/joergheintz/Documents/08_MPHPHI/11_Coursera/Coursera_ReproduciableResearch/RepResProj2")
+
+# download the data set from the source
+#mypath<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+
+
+#download.file(mypath,"myfile.bz2")
+mydata<-read.csv("myfile.bz2")[,c("STATE", "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP", "BGN_DATE")]
+
+
+# Split date from time, keep date
+BGN_DATE<-data.frame(t(as.data.frame(strsplit(as.character(mydata$BGN_DATE),' ')))[,1], row.names=NULL)
+mydata$BGN_DATE<-as.Date(mydata$BGN_DATE, "%m/%d/%Y")
+mydata$FATALITIES<-as.numeric(as.character(mydata$FATALITIES))
+
+
+## split data set into Fatalities/Injuiries and EconomicDamage 
+# Fatalities & Injuries
+df_FAT_INJ<-mydata[mydata$FATALITIES != 0 | mydata$INJURIES != 0 ,c("STATE", "EVTYPE", "FATALITIES", "INJURIES", "BGN_DATE")]
+write.csv(df_FAT_INJ, "FAT_INJ.csv")
+
+
+# Economic Damage
+df_ECO_DAM<-mydata[mydata$PROPDMG != 0 | mydata$PROPDMG != 0 | mydata$CROPDMG != 0 | mydata$CROPDMGEXP!=0, c("STATE", "EVTYPE", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP", "BGN_DATE") ] 
+write.csv(df_ECO_DAM, "ECO_DAM.csv")
+
+```
+
+
+## Fatilities
+The data set is clean from all columns that are not needed, and documented in table.  
+```{r, echo = TRUE, eval = TRUE}
+# Ranking by event Top 10
+myFAT<-read.csv("FAT_INJ.csv")
+FAT<-as.data.frame(tapply(myFAT$FATALITIES, myFAT$EVTYPE, sum))
+FAT$EVENT<-rownames(FAT)
+colnames(FAT)<-c("fatalities", "events")
+rownames(FAT)<-NULL
+FAT<-FAT[order(-FAT$fatalities),]
+FAT10<-FAT[1:10,]
+FAT10
+
+
+# sum up over time
+fat<-data.frame()
+for (ev in FAT10$events){
+        sf<-myFAT[myFAT$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SumFATALITIES<-sf$FATALITIES
+        k<-length(sf$FATALITIES)-1
+        for (i in 1:k){
+                sf$SumFATALITIES[i+1] = sf$SumFATALITIES[i]+sf$SumFATALITIES[i+1]
+                }
+        k=0
+        fat<-rbind(fat,sf)
+}
+
+
+#fat<-fat[fat$FATALITIES!=0,]
+fat$BGN_DATE<-fat$BGN_DATE<-as.Date(fat$BGN_DATE, format="%Y-%m-%d")
+fat<-fat[order(as.Date(fat$BGN_DATE, format="%Y-%m-%d")),]
+
+
+library(lattice)
+library(ggplot2)
+g = ggplot(fat, aes(x =BGN_DATE , y = SumFATALITIES, group = EVTYPE, color = factor(EVTYPE)))
+g = g + xlab("Date") + ylab("Fatality Development")
+g = g + geom_line()
+#g = g + geom_point( size=1, shape=21, fill="white")
+g = g + scale_x_date(date_breaks ="10 year")
+g
+
+
+```
+
+The turnado is regarding fatility the most deadly event. 
+
+## Injuries
+The data set is clean from all columns that are not needed, and documented in table.  
+```{r, echo = TRUE, eval = TRUE}
+# Ranking by event Top 10
+myInj<-read.csv("FAT_INJ.csv")
+INJ<-as.data.frame(tapply(myFAT$INJURIES, myFAT$EVTYPE, sum))
+INJ$EVENT<-rownames(INJ)
+colnames(INJ)<-c("injuries", "events")
+rownames(INJ)<-NULL
+INJ<-INJ[order(-INJ$fatalities),]
+INJ10<-INJ[1:10,]
+INJ10
+
+# sum up over time
+fat<-data.frame()
+for (ev in FAT10$events){
+        sf<-myFAT[myFAT$EVTYPE == ev, ]
+        sf<-sf[order(as.Date(sf$BGN_DATE, format="%Y-%m-%d")),]
+        sf$SumFATALITIES<-sf$FATALITIES
+        k<-length(sf$FATALITIES)-1
+        for (i in 1:k){
+                sf$SumFATALITIES[i+1] = sf$SumFATALITIES[i]+sf$SumFATALITIES[i+1]
+                }
+        k=0
+        fat<-rbind(fat,sf)
+}
+
+
+#fat<-fat[fat$FATALITIES!=0,]
+fat$BGN_DATE<-fat$BGN_DATE<-as.Date(fat$BGN_DATE, format="%Y-%m-%d")
+fat<-fat[order(as.Date(fat$BGN_DATE, format="%Y-%m-%d")),]
+
+
+library(lattice)
+library(ggplot2)
+g = ggplot(fat, aes(x =BGN_DATE , y = SumFATALITIES, group = EVTYPE, color = factor(EVTYPE)))
+g = g + xlab("Date") + ylab("Fatality Development")
+g = g + geom_line()
+#g = g + geom_point( size=1, shape=21, fill="white")
+g = g + scale_x_date(date_breaks ="10 year")
+g
+
